@@ -1,13 +1,12 @@
 # NIFF Replication — Lab Notebook
 
-**Goal:** Verify the repo's IFT machinery (`ift/fields`, `methods/nsvi`) reproduces
-Hao & Bilionis *Neural Information Field Filter* (MSSP 2025, `wiki/raw/niff.pdf`),
-starting with **§5.1** (single-DOF Duffing oscillator), then extending to the SDE
-setting + joint initial-condition inference.
+**Goal:** Reproduce Hao & Bilionis *Neural Information Field Filter* (MSSP 2025), **§5.1**
+(single-DOF Duffing oscillator), in JAX.
 
-**Branch:** `niff-replication`
-**Code:** `experiments/niff_replication/{duffing_s51,run_duffing_s51,plot_duffing_s51}.py`
-**Engine:** `methods/nsvi/nsvi.py` (byte-identical to vendored `methods/niff-main/nsvi.py`).
+**Code:** `niff/{nsvi,npsgld,duffing_s51,fields,utils}.py`, `scripts/{run,plot}_duffing_s51.py`.
+
+> Ported from a research monorepo; historical entries below may reference the original
+> layout (`methods/…`, `experiments/…`) and a GPU cluster.
 
 **Paper §5.1 truth:** k1=0.3, k2=-1, k3=1; gamma=0.37, omega=1.2; IC=(1,0);
 T=50, RK dt=0.01; sigma_y=0.075 (5% of ybar=1.5); Fourier K=40; std-normal priors.
@@ -21,7 +20,7 @@ T=50, RK dt=0.01; sigma_y=0.075 (5% of ybar=1.5); Fourier K=40; std-normal prior
 
 ## Design decisions (2026-06-29)
 
-- **Faithful deterministic §5.1 first**, then SDE extension + joint-IC (per user).
+- **§5.1 replication**, both state-path variants (reparameterized + relaxed).
 - Both NSVI variants in the first pass → Figs 2 (states), 3 (params), 5 (xhat(0) vs x0).
   SGLD samplers (NSGLD/NPSGLD, Fig 4) deferred.
 - **Likelihood gets no x0** in the engine → reparam folds IC into w; relaxed keeps the
@@ -96,7 +95,7 @@ Pending user go-ahead on shared-quota commitment:
 - GPU-smoke (~50k iters, ~10 min) first per `feedback_cluster_smoke_before_scale`, then scale.
 - scp uncommitted edits before launch (`feedback_cluster_scp_modified_files`); NO explicit
   `cuda/X.Y` module load (`feedback_lmod_cuda_warning`).
-- Follow-ups after agreement confirmed: NSGLD/NPSGLD (Fig 4), then SDE extension + joint-IC.
+- Follow-ups after agreement confirmed: NSGLD/NPSGLD (Fig 4 four-method panel).
 
 ### v3 — Gautschi GPU smoke, both variants, faithful beta2=1e5 (2026-06-29)
 
@@ -145,12 +144,12 @@ beta2=1e5, lr=1e-3. **COMPLETED.** relaxed 1604 s (27 min), reparam 1956 s (33 m
 posterior). This is precisely the mean-field diagonal-guide limitation the paper flags and the
 motivation for **Phase 1 (NPSGLD)**, which should bracket the truth.
 
-Figures saved to `experiments/niff_replication/figures/` (tracked). Phase 0 done →
+Figures saved to `figures/` (tracked). Phase 0 done →
 update ROADMAP, proceed to Phase 1.
 
 ### v5 — Phase 1: NPSGLD wired + full run + verdict (2026-06-30)
 
-Added `methods/nsvi/npsgld.py` (mirror of vendored paper code; same callback interface).
+Added `niff/npsgld.py` (mirror of vendored paper code; same callback interface).
 `run_duffing_s51.py --method npsgld`; results labelled `{method}_{variant}`.
 
 **XLA cuBLAS-Lt crash (debugged):** NPSGLD's batched 4-chain GEMMs crashed on gautschi-gpu with
@@ -178,13 +177,13 @@ parameter bias was the diagonal-guide family, not the model — exactly the pape
 truth lines; Fig 5 shows the sampler's xhat(0;w)≈aux x0 overlap vs NSVI's "slight differences".
 Velocity IC under NPSGLD is wide/biased (-0.13) — least-identifiable (position-only obs).
 
-Comparison figures: `experiments/niff_replication/figures/comparison/` (tracked).
-Phase 1 done → Phase 2 (SDE extension) is next.
+Comparison figures: `figures/comparison/` (tracked).
+Phase 1 done → Phase 1.5 (collocation subsampling + NSGLD) next.
 
 ### v6 — Phase 1.5: subsampling + NSGLD; four-method comparison complete (2026-06-30)
 
 **Engine extensions (opt-in, backward-compatible — verified byte-identical when off):**
-- `methods/nsvi/nsvi.py`: `stochastic_callbacks` threads a per-iter data_key so callbacks
+- `niff/nsvi.py`: `stochastic_callbacks` threads a per-iter data_key so callbacks
   subsample (n_t collocation pts, m_y measurements). PRNG stream unchanged when off.
 - npsgld: `preconditioned` flag (now `preconditioner:str` after the refactor) → NSGLD.
 - `duffing_s51.build_variant(subsample,n_t,m_y)`: unbiased minibatch callbacks.
@@ -215,9 +214,8 @@ subsample (bias-corrected) runs; samplers full-batch (same target posterior).
 | NPSGLD | 0.334 | -0.952 | 0.968 |
 | NSGLD | 0.336 | -0.977 | 0.992 |
 
-**Refactor (separate):** npsgld extracted to `methods/npsgld/` (own method, not under nsvi);
-OU psgld → `archive/methods/psgld/`; shared validate_mission → `methods/benchmarking/`.
-`preconditioner ∈ {identity, rmsprop, diag_fisher/dense_fisher (reserved)}`. Phase 1.5 done.
+**Sampler (`niff.npsgld`):** `preconditioner ∈ {identity, rmsprop, diag_fisher, dense_fisher}`
+(the last two implemented in Stage B, below). Phase 1.5 done.
 
 ### Phase 1.5 — key lessons (transferable)
 
@@ -226,7 +224,7 @@ OU psgld → `archive/methods/psgld/`; shared validate_mission → `methods/benc
    truth (our k3 sat low: 0.888→0.937 as n_colloc 200→2M-grid, never reaching 1.0). **Random
    per-iteration collocation** (n_t points ~ U[0,T]) is an *unbiased* MC estimator of the
    integral gradient and removes the bias (reparam k3 → 0.982). Use random subsampling, not a
-   fixed grid, whenever θ accuracy matters. Carries directly to the SDE energy in Phase 2.
+   fixed grid, whenever θ accuracy matters (any physics-integral energy).
 2. **Subsampling buys unbiasedness, NOT speed — on GPU.** The 2M-iter `lax.scan` is launch-
    overhead-bound, so n_t=10 vs n_colloc=1000 gave ~identical wall-time (~27 min). The paper's
    7s is CPU+subsampling (CPU *is* collocation-cost-sensitive). On GPU, subsample for the right
@@ -269,15 +267,14 @@ trade off). Figure: `results/niff_s51_precond_k2k3.png`.
      (and under θ–w coupling, where the θ-Fisher reflects conditional-given-w not marginal
      curvature) it over-explores the soft direction → posterior ~10× too wide, energy ~173>90.
 
-**Lesson (transferable to SDEs):** for IFT/NIFF — a few parameters coupled to a high-dim field —
+**Lesson:** for IFT/NIFF — a few parameters coupled to a high-dim field —
 **diagonal preconditioning (NPSGLD/rmsprop) is the robust workhorse.** Matrix preconditioners on
 the parameter block are not a free win: they need (a) a near-mode start (burn-in fragility) and
 (b) step-size retuning for the whitened geometry, and the θ-Fisher is confounded by θ–field
-coupling. The SDE phase adds (drift, σ) coupling → more of exactly this; default to NPSGLD, treat
+coupling. Higher-dimensional / more-coupled parameter posteriors amplify this; default to NPSGLD, treat
 matrix preconditioners as a careful, situational tool. (Not chasing dense_fisher tuning now —
 the robust-diagonal conclusion stands; step-annealed dense_fisher is a possible future exercise.)
 
-<!-- next: Phase 2 SDE extension -->
 
 
 

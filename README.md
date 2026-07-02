@@ -27,7 +27,7 @@ scripts/
 ├── run_duffing_s51.py   CLI: run a method → posterior .npz + summary.json
 └── plot_duffing_s51.py  Overlay saved posteriors → figures
 notes/lab.md        Chronological lab notebook (results, lessons, gotchas)
-ROADMAP.md          Phase plan (replication → SDE extension → …)
+ROADMAP.md          Status of replicated phases + optional next examples
 PROGRESS.md         Consolidated writeup + side-by-side paper comparison
 figures/            Reproduced figures
 ```
@@ -93,12 +93,12 @@ float64 is enabled automatically. On CPU, keep iteration counts modest; the pape
   subsampling (an unbiased MC estimate of the physics integral) removes it.
 - **Preconditioner study.** On the strongly coupled `(k2,k3)` posterior (corr ≈ −0.97), the
   diagonal methods are the robust workhorse; the dense matrix preconditioner over-damps cold
-  burn-in and over-disperses without careful tuning. (A lesson for higher-dimensional / SDE
-  extensions.)
+  burn-in and over-disperses without careful tuning. (A lesson for higher-dimensional /
+  more-coupled parameter posteriors.)
 
 ## Provenance
 
 Ported from a research monorepo; the engines (`niff/nsvi.py`, `niff/npsgld.py`) are a
 generalization of the vendored NIFF reference code. This standalone repo is a clean jumping-off
-point for further work (e.g. the SDE extension in `ROADMAP.md`). The paper itself is not
+point for further work (see `ROADMAP.md` for the optional remaining paper examples). The paper itself is not
 redistributed here — see the DOI: <https://doi.org/10.1016/j.ymssp.2024.112253>.
