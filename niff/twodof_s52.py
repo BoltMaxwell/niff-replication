@@ -40,6 +40,7 @@ import numpy as np
 import optax
 
 from niff.utils import collocation_grid
+from niff.fields import rbf_basis
 
 jax.config.update("jax_enable_x64", True)
 
@@ -130,13 +131,15 @@ def make_state_path(cfg: TwoDOFConfig, residual: bool):
     T = cfg.final_time
     Kb, sig = cfg.n_rbf, cfg.rbf_sigma
     Kf, Tbar, hid = cfg.n_fourier, cfg.fourier_period, cfg.nn_hidden
-    centers = jnp.linspace(0.0, 1.0, Kb)
+    # Shared RBF field basis (niff.fields.rbf_basis) -- no private copy. That basis
+    # parameterizes width as spread_ratio = sigma / center-spacing on the physical grid
+    # [0, T]; the config's ``rbf_sigma`` is sigma in *normalized* time [0, 1]. With
+    # centers at linspace(0, T, Kb) the two coincide when spread_ratio = rbf_sigma*(Kb-1)
+    # (sigma_phys/T = rbf_sigma). rbf_basis is evaluated at physical t below.
+    rbf_spread = sig * (Kb - 1)
     d_in = 2 * Kf + 1
     n_rbf_total = 4 * Kb
     n_nn = hid * d_in + hid + 4 * hid + 4  # W1,b1,W2,b2
-
-    def rbf(t01: Array) -> Array:
-        return jnp.exp(-(t01 - centers) ** 2 / (2.0 * sig**2))  # (Kb,)
 
     def fourier_encode(t01: Array) -> Array:
         ks = jnp.arange(1, Kf + 1)
@@ -160,7 +163,7 @@ def make_state_path(cfg: TwoDOFConfig, residual: bool):
     def state_path(t: Array, w: Array) -> Array:
         t01 = t / T
         w_rbf, w_nn = split(w)
-        lin = w_rbf @ rbf(t01)  # (4,)
+        lin = w_rbf @ rbf_basis(t, T, Kb, rbf_spread)  # (4,) -- shared niff.fields.rbf basis
         return lin + nn(t01, w_nn) if residual else lin
 
     dstate_dt = jax.jacfwd(lambda t, w: state_path(t, w), argnums=0)  # (4,) d/dt
