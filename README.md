@@ -21,11 +21,12 @@ niff/
 ├── nsvi.py         Nested stochastic variational inference (optimizer)
 ├── npsgld.py       Nested (preconditioned) SGLD sampler
 ├── duffing_s51.py  Paper §5.1 Duffing problem: data (RK4), Fourier fields, energies
+├── twodof_s52.py   Paper §5.2 two-DOF + residual-NN (RBF basis + Fourier-encoded MLP)
 ├── fields.py       Truncated Fourier basis
 └── utils.py        Collocation grid
 scripts/
-├── run_duffing_s51.py   CLI: run a method → posterior .npz + summary.json
-└── plot_duffing_s51.py  Overlay saved posteriors → figures
+├── run_duffing_s51.py / run_twodof_s52.py    CLI: run a method → posterior .npz + summary
+└── plot_duffing_s51.py / plot_twodof_s52.py  Overlay saved posteriors → figures
 notes/lab.md        Chronological lab notebook (results, lessons, gotchas)
 ROADMAP.md          Status of replicated phases + optional next examples
 PROGRESS.md         Consolidated writeup + side-by-side paper comparison
@@ -83,6 +84,8 @@ float64 is enabled automatically. On CPU, keep iteration counts modest; the pape
 
 ## Key results (see `notes/lab.md`, `PROGRESS.md` for detail)
 
+### §5.1 Duffing
+
 - **Agreement with the paper.** State reconstruction matches Fig 2 (position tight, *unobserved*
   velocity recovered with a wider band); the reparameterized and relaxed variants agree; the
   relaxed prior reproduces the Fig 5 "slight differences" between `xhat(0;w)` and `x0`.
@@ -95,6 +98,18 @@ float64 is enabled automatically. On CPU, keep iteration counts modest; the pape
   diagonal methods are the robust workhorse; the dense matrix preconditioner over-damps cold
   burn-in and over-disperses without careful tuning. (A lesson for higher-dimensional /
   more-coupled parameter posteriors.)
+
+### §5.2 two-DOF + residual NN (`niff/twodof_s52.py`)
+
+- **The residual-NN demonstration reproduced (Fig 6).** With a linear RBF basis alone the states
+  cannot be reconstructed; adding the Fourier-encoded residual NN reconstructs them near-perfectly.
+  The state-path w-dimension (344) matches the paper's Table 3.
+- **A cautionary finding — flexible fields loosen identifiability.** The residual NN fits the
+  *states* perfectly but leaves flat directions in *parameter* space. NSVI recovers the parameters
+  biased-but-reasonably; **NPSGLD diverges into a degeneracy** (k1→0 makes the cubic ε1 term vanish,
+  so the sampler drifts off). This flips the §5.1 lesson: **samplers expose degeneracies that VI
+  hides.** (Exact parameter recovery would need stronger nonlinear excitation and/or constraints;
+  our forcing was a documented guess, since the paper does not state it.)
 
 ## Provenance
 

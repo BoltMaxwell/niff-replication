@@ -40,11 +40,17 @@ cold burn-in, over-disperses without near-mode start + step retuning).
 
 ---
 
+## §5.2 — two-DOF + residual neural network  ✅ (`niff/twodof_s52.py`)
+
+The example that exercises NIFF's namesake device (RBF linear basis + Fourier-encoded residual NN,
+paper eq. 8; w-dim 344 = Table 3). **Demonstration reproduced (Fig 6):** RBF alone cannot
+reconstruct the states, the residual NN does. **Cautionary finding:** the flexible NN loosens
+*parameter* identifiability — NSVI recovers params biased-but-reasonably, NPSGLD diverges into a
+degeneracy (k1→0 ⇒ ε1 unconstrained). **Samplers expose degeneracies that VI hides** — the opposite
+of §5.1. Details in `notes/lab.md`, `PROGRESS.md`; figures in `figures/s52/`.
+
 ## Optional — remaining paper examples  ⬜
 
-- ⬜ **§5.2** — two-DOF nonlinear system with a **residual neural network** (linear basis +
-  Fourier-encoded NN, paper eq. 8) on an RBF basis. The cleanest next example; the only one
-  that exercises the hybrid parameterization this repo doesn't yet have.
 - ⬜ **§5.3** — twenty-story Bouc–Wen frame (high-dimensional, w-dim 4660). Heavy.
 - ⬜ **§5.4** — experimental nonlinear energy sink (real data; needs the external dataset).
 - ⬜ **Faithful cosmetics for §5.1** — state normalization (x̄=(1.5,1)) and the full-period

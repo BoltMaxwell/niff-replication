@@ -102,15 +102,19 @@ retuning. See `notes/lab.md` (v7) and `figures/preconditioner/`.
 The paper has three more numerical examples beyond §5.1. None are implemented here; cataloged
 for reference.
 
-### §5.2 — two-DOF nonlinear system, **residual neural network** (the paper's headline device)
+### §5.2 — two-DOF nonlinear system, **residual neural network**  ✅ DONE (`niff/twodof_s52.py`)
 - 2 masses, Duffing spring + nonlinear damper; 4 states, **8 params**, truth m=1, c=0.2, k=1,
-  ε=0.2. Measure q1 and q1+q2. Normalize by 1; ȳ=(1,2).
-- Data: 50 s RK, dt=0.1; IC=(0,0,0.5,0); noise 5% of norm const.
-- State path: **RBF basis** (Kb=20, σk=0.05) **+ Fourier-encoded residual NN** (K=10, 1 hidden
-  layer width 10, swish). RBF *alone* fails; the residual NN corrects it.
-- NSVI 300k iters (anneal 200k); NPSGLD 3 chains × 3M steps.
-- **Relevance:** exercises the hybrid linear+NN parameterization (paper eq. 8), which this repo
-  does not yet implement. The cleanest next example.
+  ε=0.2. Measure q1 and q1+q2. State path: **RBF basis** (Kb=20, σk=0.05) **+ Fourier-encoded
+  residual NN** (K=10, 1 hidden width 10, swish, 4 outputs) → **w-dim 344 (matches Table 3)**.
+- **Demonstration reproduced (Fig 6):** RBF alone cannot reconstruct the states; the residual NN
+  reconstructs them near-perfectly. Physics validated (LS recovers all 8 params from the true
+  trajectory, RMS 8e-4).
+- **Cautionary finding:** the flexible NN loosens *parameter* identifiability. NSVI recovers the
+  params biased-but-reasonably; **NPSGLD diverges into a degeneracy** (k1→0 ⇒ cubic ε1 term
+  vanishes ⇒ sampler drifts). **Samplers expose degeneracies that VI hides** — the opposite of
+  §5.1. Exact param recovery would need stronger nonlinear excitation and/or constraints.
+- Divergence: forcing F=2, ω0=1.2, Fourier period Tbar=10 chosen (unspecified in the paper; from
+  ref [84]). Figures in `figures/s52/`.
 
 ### §5.3 — twenty-story Bouc–Wen frame (**high-dimensional**)
 - 20-DOF Bouc–Wen frame; estimate 20 stiffnesses s₁:₂₀ ~ U[8,10]. First 5 s of El-Centro
@@ -130,10 +134,11 @@ for reference.
 
 ---
 
-## 5. Possible next steps (all optional; §5.1 is complete)
+## 5. Possible next steps (all optional; §5.1 and §5.2 are complete)
 
-1. **§5.2 residual-NN example** — the most informative remaining paper example; would add the
-   hybrid linear-basis + Fourier-encoded neural-network state path (paper eq. 8) and an RBF basis.
-2. **§5.3 / §5.4** — heavier, and §5.4 needs external experimental data.
+1. **§5.3 / §5.4** — heavier, and §5.4 needs external experimental data.
+2. **§5.2 exact parameter recovery** — the demonstration (Fig 6) reproduces; tightening the
+   parameter posteriors would need stronger nonlinear excitation (the true ref-[84] forcing) and/or
+   parameter constraints to break the NN-flexibility degeneracy (see §4 §5.2 and `notes/lab.md`).
 3. **Faithful cosmetics for §5.1** — state normalization and the full-period Fourier basis, if an
    exact match to the paper's conditioning is wanted (not needed for agreement).

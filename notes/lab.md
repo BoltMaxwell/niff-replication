@@ -275,6 +275,48 @@ coupling. Higher-dimensional / more-coupled parameter posteriors amplify this; d
 matrix preconditioners as a careful, situational tool. (Not chasing dense_fisher tuning now —
 the robust-diagonal conclusion stands; step-annealed dense_fisher is a possible future exercise.)
 
+### §5.2 — two-DOF + residual neural network (2026-07-02/03)
+
+The example that exercises NIFF's namesake device (RBF linear basis + Fourier-encoded residual
+NN). Code: `niff/twodof_s52.py`, `scripts/run_twodof_s52.py`, `scripts/plot_twodof_s52.py`.
+
+**System:** 2-DOF nonlinear (ref [84]), 4 states, 8 params (m1,m2,c1,c2,k1,k2,ε1,ε2), truth
+m=1, c=0.2, k=1, ε=0.2. Measure q1 and q1+q2. **State path decoded from Table 3 (w-dim 344):**
+per-component RBF (4×20=80) + one shared Fourier-encoded MLP (encode t→21, K=10; 1 hidden
+width 10, swish; **4 outputs**) = 264. Mass-matrix-residual energy; relaxed prior (aux x0);
+kinematic warmup (seed all 4 fields: displacements from data, velocities from field derivatives).
+
+**Documented divergences (unspecified in the paper, from ref [84]):** forcing F=2, ω0=1.2 and
+Fourier-encoding period Tbar=10 — chosen so a 20-term RBF under-fits (the premise) and the K=10 NN
+can still fit. Physics validated: LS on the true trajectory recovers all 8 params (RMS 8e-4).
+
+**Demonstration REPRODUCED (Fig 6, `figures/s52/`):** rbf_nn tracks the truth near-perfectly for
+q1 and q2; rbf_only fails badly — RBF-alone cannot reconstruct, the residual NN corrects it (the
+paper's headline claim for §5.2). Fig 7: the residual helps every parameter (rbf_nn ≫ rbf_only).
+
+**Param-recovery caveat + the key lesson.** Full budget (NSVI 300k; NPSGLD 3 chains × 3M):
+| | NSVI rbf_nn | NPSGLD rbf_nn | truth |
+|---|---|---|---|
+| m1 | 0.28±0.61 | 0.18±0.18 | 1.0 |
+| k1 | 0.59±0.22 | **−0.04±0.04** | 1.0 |
+| e1 | −0.00±0.16 | **−7.1±0.5** | 0.2 |
+
+NSVI rbf_nn is biased low but reasonable (best result). **NPSGLD rbf_nn DIVERGED** into a
+degeneracy: k1→0 makes the cubic term `k1·ε1·q1³` vanish → ε1 unconstrained → the Langevin chain
+diffuses off to −7.
+
+**Lesson (opposite of §5.1):** in §5.1 the *rigid* Fourier basis kept params well-identified, so
+the NPSGLD sampler beat NSVI. Here the *flexible* residual NN reconstructs the states perfectly but
+**loosens parameter identifiability** (flat directions: k↔m, ε when the linear stiffness is small).
+NSVI's guide + warmup-anchoring stays in the reasonable region; the sampler *explores* the
+degeneracy — more sampling makes it worse. **Samplers expose degeneracies that VI hides.** The
+paper likely avoids this via the true [84] forcing exciting the nonlinearity more strongly (our
+forcing was a documented guess) and/or implicit constraints.
+
+**Verdict:** §5.2 demonstration reproduced (Fig 6); the RBF+NN hybrid capability built + validated;
+exact param recovery limited by NN-flexibility degeneracy (documented). NSVI figures are primary in
+`figures/s52/`; the 4-way NSVI/NPSGLD comparison is `figures/s52/fig7_4way_nsvi_npsgld.png`.
+
 
 
 
