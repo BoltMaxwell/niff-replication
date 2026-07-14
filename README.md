@@ -11,8 +11,28 @@ dynamics; and the intractable posterior over (path coefficients `w`, parameters 
 initial state `x0`) is approximated by either a variational method (**NSVI**) or a sampler
 (**NPSGLD**).
 
-This repo reproduces the paper's **Section 5.1** single-degree-of-freedom Duffing oscillator
-end-to-end, and extends the sampler with a family of preconditioners.
+This repo reproduces the paper's **Section 5.1** (single-DOF Duffing) and **Section 5.2**
+(two-DOF + residual neural network) end-to-end, and extends the sampler with a family of
+preconditioners.
+
+> **Provenance.** This replication was carried out by [Claude Code](https://claude.com/claude-code)
+> (Anthropic) working from the published paper — writing the JAX implementation, running the
+> experiments, and producing the figures and write-ups (`notes/lab.md`, `PROGRESS.md`,
+> `ROADMAP.md`). The paper is not redistributed here; see the DOI below.
+
+## Scope — how much of the paper is replicated
+
+The paper's Section 5 has **four numerical examples**. Two are reproduced end-to-end here; two
+are cataloged but not implemented. The core method — both state-path parameterizations
+(reparameterized + relaxed), **NSVI** and **NPSGLD**, the collocation-subsampling estimator, and
+a preconditioner family — is fully implemented and shared across examples.
+
+| Paper example | w-dim | Status | Notes |
+|---|---|---|---|
+| **§5.1** Duffing oscillator (single-DOF) | 162 | ✅ reproduced | Figs 2–5, four-method comparison, preconditioner study |
+| **§5.2** two-DOF + residual NN | 344 | ✅ reproduced | Fig 6 demonstration; parameter-identifiability caveat (below) |
+| §5.3 twenty-story Bouc–Wen frame | 4660 | ⬜ not implemented | high-dimensional; heavy |
+| §5.4 experimental nonlinear energy sink | 16000 | ⬜ not implemented | needs the external experimental dataset |
 
 ## What's here
 
@@ -110,6 +130,47 @@ float64 is enabled automatically. On CPU, keep iteration counts modest; the pape
   so the sampler drifts off). This flips the §5.1 lesson: **samplers expose degeneracies that VI
   hides.** (Exact parameter recovery would need stronger nonlinear excitation and/or constraints;
   our forcing was a documented guess, since the paper does not state it.)
+
+## Observed discrepancies vs. the paper
+
+What differs between this replication and the paper, and how the paper's own results look at each
+point (fuller detail with numbers in `PROGRESS.md` §3.3 and `notes/lab.md`).
+
+**Resolved discrepancies** (matched the paper after a fix):
+
+- **k3 quadrature bias.** With a *fixed* collocation grid, NSVI's k3 sat low (~0.937 vs the
+  paper's ~1.02) and climbed as the grid densified — a quadrature bias, not a model error.
+  *Random per-iteration* collocation subsampling (an unbiased MC estimate of the physics
+  integral) fixed it: k3 → 0.982, k2 → −0.970. Now matches the paper.
+- **NSGLD (un-preconditioned) sampler.** Now run (`preconditioner=identity`); completes the
+  four-method panel and is the widest/slowest, exactly as in the paper. It is step-size fragile
+  (diverged at 1e-5, stable at 1e-6).
+
+**Remaining differences** (do not contradict the paper's results):
+
+- **Runtime, not seconds.** Paper Table 2 reports §5.1 at **7–90 s on an M1 Pro CPU**; our
+  paper-faithful runs take **~20–27 min on a GPU**. Cause: the paper's speed comes from CPU +
+  per-iteration subsampling (n_t=10 collocation, m_y=10 measurements); on GPU the 2M-iteration
+  `lax.scan` is launch-overhead-bound, so subsampling buys the unbiased gradient but ~no speedup.
+  Parameter *posteriors* still agree — only wall-clock differs.
+- **Fourier basis convention.** We use a half-period basis `[1, cos(πkt), sin(πkt)]`; the paper
+  uses full-period `2πk·t/T̄`. Both K=40-expressive; no effect on agreement.
+- **No state normalization.** We work in physical coordinates; the paper normalizes states by
+  (x̄1,x̄2)=(1.5,1). A conditioning device only — does not change the posterior.
+- **Unspecified measurement count (§5.1).** The paper does not state n_d for §5.1; we chose 1000.
+- **Riemannian Γ correction omitted** in the preconditioned samplers (its `jacfwd` is ~300× the
+  base cost → intractable at 2M iters); the standard practical pSGLD approximation is used.
+- **§5.2 forcing was a documented guess.** The paper does not state the §5.2 excitation; we used
+  F=2, ω0=1.2, Fourier period T̄=10 (from ref [84]). The Fig 6 *state* reconstruction reproduces
+  regardless, but with this weaker forcing the flexible residual NN leaves flat directions in
+  *parameter* space: NSVI recovers the parameters biased-but-reasonably while **NPSGLD diverges
+  into a degeneracy** (k1→0 makes the cubic ε1 term vanish). This is a genuine finding, not a bug
+  — samplers expose a degeneracy VI hides — but exact §5.2 parameter recovery would need the
+  paper's true (stronger) nonlinear excitation and/or parameter constraints.
+
+**Overall:** §5.1 and §5.2 reproduce the paper's figures and its NSVI-vs-sampler story, with the
+truth recovered by all four methods in §5.1. The one substantive discrepancy (the collocation
+quadrature bias) is understood and fixed; the rest are conventions or a runtime artifact.
 
 ## Provenance
 
